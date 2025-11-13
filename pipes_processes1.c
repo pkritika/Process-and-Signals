@@ -1,17 +1,4 @@
-/*
-Task:
-Modify the code to create a 2-way pipe, that passes the string from P1 to P2 
-and concatenates “howard.edu” and prints to the stdout. 
-Next, P2 prompts user for a second input and appends that to the string just 
-received from P1, then P2 passes this string back to P1, and P1 concatenates 
-“gobison.org” to the original string before printing it to stdout.
-
-Example:
-Input (P1): www.geeks
-Output (P2): www.geekshoward.edu
-Input (P2): helloworld
-Output (P1): www.geekshoward.eduhelloworldgobison.org
-*/
+// C program to demonstrate use of fork() and pipe() 
 
 #include<stdio.h> 
 #include<stdlib.h> 

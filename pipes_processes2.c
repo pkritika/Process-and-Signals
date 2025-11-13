@@ -14,47 +14,94 @@
 int main(int argc, char **argv)
 {
   int pipefd[2];
-  int pid;
+  pid_t cat_pid, grep_pid;
 
+  // Determine the search term: use argv[1] if provided, otherwise default
+  char *grep_term = "Lakers"; // Default search term
+  if (argc > 1) {
+    grep_term = argv[1];
+  }
+
+  // Arguments for the two commands
   char *cat_args[] = {"cat", "scores", NULL};
-  char *grep_args[] = {"grep", "Lakers", NULL};
+  char *grep_args[] = {"grep", grep_term, NULL};
 
-  // make a pipe (fds go in pipefd[0] and pipefd[1])
+  // Create the pipe
+  if (pipe(pipefd) == -1) {
+    perror("pipe");
+    exit(EXIT_FAILURE);
+  }
 
-  pipe(pipefd);
+  // --- Fork for the 'grep' process (Child 1) ---
+  grep_pid = fork();
+  if (grep_pid == -1) {
+    perror("fork (grep)");
+    exit(EXIT_FAILURE);
+  }
 
-  pid = fork();
+  if (grep_pid == 0) {
+    // --- Child 1 (grep) ---
+    // This process reads from the pipe
 
-  if (pid == 0)
-    {
-      // child gets here and handles "grep Villanova"
-
-      // replace standard input with input part of pipe
-
-      dup2(pipefd[0], 0);
-
-      // close unused hald of pipe
-
-      close(pipefd[1]);
-
-      // execute grep
-
-      execvp("grep", grep_args);
+    // Replace standard input (0) with the read-end of the pipe (pipefd[0])
+    if (dup2(pipefd[0], STDIN_FILENO) == -1) {
+      perror("dup2 (grep)");
+      exit(EXIT_FAILURE);
     }
-  else
-    {
-      // parent gets here and handles "cat scores"
 
-      // replace standard output with output part of pipe
+    // Close both ends of the pipe in the child
+    // We don't need them after dup2
+    close(pipefd[0]);
+    close(pipefd[1]);
 
-      dup2(pipefd[1], 1);
+    // Execute grep
+    execvp("grep", grep_args);
+    
+    // execvp only returns if an error occurred
+    perror("execvp (grep)");
+    exit(EXIT_FAILURE);
+  }
 
-      // close unused unput half of pipe
+  // --- Fork for the 'cat' process (Child 2) ---
+  cat_pid = fork();
+  if (cat_pid == -1) {
+    perror("fork (cat)");
+    exit(EXIT_FAILURE);
+  }
 
-      close(pipefd[0]);
+  if (cat_pid == 0) {
+    // --- Child 2 (cat) ---
+    // This process writes to the pipe
 
-      // execute cat
-
-      execvp("cat", cat_args);
+    // Replace standard output (1) with the write-end of the pipe (pipefd[1])
+    if (dup2(pipefd[1], STDOUT_FILENO) == -1) {
+      perror("dup2 (cat)");
+      exit(EXIT_FAILURE);
     }
+
+    // Close both ends of the pipe in this child
+    close(pipefd[0]);
+    close(pipefd[1]);
+
+    // Execute cat
+    execvp("cat", cat_args);
+
+    // execvp only returns if an error occurred
+    perror("execvp (cat)");
+    exit(EXIT_FAILURE);
+  }
+
+  // --- Parent Process ---
+  // This process created both children
+  
+  // The parent must close *both* ends of the pipe, otherwise
+  // the 'grep' child will never get EOF and will hang.
+  close(pipefd[0]);
+  close(pipefd[1]);
+
+  // Wait for both children to finish
+  waitpid(grep_pid, &status, 0);
+  waitpid(cat_pid, &status, 0);
+  
+  return 0;
 }
